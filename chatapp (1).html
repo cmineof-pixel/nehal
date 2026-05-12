@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ChatApp - Nehal</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,sans-serif;background:#f0f0ed;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;}
+#loginScreen{background:#fff;border-radius:16px;padding:32px 24px;width:90%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,0.1);text-align:center;}
+#loginScreen h1{font-size:28px;margin-bottom:6px;color:#1a1a1a;}
+#loginScreen p{font-size:14px;color:#888;margin-bottom:24px;}
+#loginScreen input{width:100%;padding:12px 16px;border:1px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;margin-bottom:12px;font-family:inherit;}
+#loginScreen input:focus{border-color:#185FA5;}
+#loginBtn{width:100%;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:15px;cursor:pointer;font-family:inherit;font-weight:500;}
+#loginBtn:hover{opacity:0.9;}
+.room-select{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:16px;}
+.room-btn{padding:8px 14px;border:1.5px solid #e0e0e0;border-radius:20px;background:#fff;font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.15s;}
+.room-btn.active{border-color:#185FA5;background:#185FA5;color:#fff;}
+#chatScreen{display:none;flex-direction:column;width:100%;max-width:480px;height:100vh;background:#fff;}
+.chat-header{padding:12px 16px;background:#185FA5;color:#fff;display:flex;align-items:center;gap:10px;}
+.chat-header h2{font-size:15px;font-weight:500;flex:1;}
+.online-count{font-size:12px;background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:20px;}
+#leaveBtn{background:none;border:none;color:#fff;cursor:pointer;font-size:13px;opacity:0.8;}
+.messages{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:#f8f8f6;}
+.msg-row{display:flex;gap:8px;align-items:flex-end;}
+.msg-row.me{flex-direction:row-reverse;}
+.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;color:#fff;}
+.bubble{max-width:70%;}
+.sender-name{font-size:10px;color:#999;margin-bottom:2px;}
+.me .sender-name{text-align:right;}
+.msg-text{padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.5;word-break:break-word;}
+.msg-row:not(.me) .msg-text{background:#efefed;color:#1a1a1a;border-radius:4px 12px 12px 12px;}
+.msg-row.me .msg-text{background:#185FA5;color:#fff;border-radius:12px 4px 12px 12px;}
+.msg-time{font-size:10px;color:#bbb;margin-top:2px;}
+.me .msg-time{text-align:right;}
+.system-msg{text-align:center;font-size:11px;color:#bbb;padding:2px 0;}
+.typing-bar{padding:4px 16px 2px;font-size:11px;color:#999;min-height:20px;}
+.input-area{padding:10px 12px;border-top:1px solid #eee;display:flex;gap:8px;align-items:center;background:#fff;}
+.msg-input{flex:1;padding:10px 14px;border:1px solid #e0e0e0;border-radius:22px;font-size:14px;outline:none;font-family:inherit;background:#f5f5f3;}
+.msg-input:focus{border-color:#185FA5;background:#fff;}
+.send-btn{width:38px;height:38px;border-radius:50%;background:#185FA5;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.send-btn:hover{opacity:0.85;}
+.send-btn svg{width:18px;height:18px;fill:#fff;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <h1>💬 ChatApp</h1>
+  <p>Apna naam likho aur room choose karo</p>
+  <input type="text" id="nameInput" placeholder="Tumhara naam..." maxlength="20"/>
+  <div class="room-select" id="roomSelect">
+    <button class="room-btn active" data-room="general">🌐 General</button>
+    <button class="room-btn" data-room="gaming">🎮 Gaming</button>
+    <button class="room-btn" data-room="music">🎵 Music</button>
+    <button class="room-btn" data-room="fun">😂 Fun</button>
+  </div>
+  <button id="loginBtn">Chat Shuru Karo →</button>
+</div>
+
+<div id="chatScreen">
+  <div class="chat-header">
+    <span id="roomEmoji">🌐</span>
+    <h2 id="roomName">General</h2>
+    <span class="online-count" id="onlineCount">0 online</span>
+    <button id="leaveBtn">← Wapas</button>
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="typing-bar" id="typingBar"></div>
+  <div class="input-area">
+    <input class="msg-input" id="msgInput" placeholder="Kuch likho..."/>
+    <button class="send-btn" id="sendBtn">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, push, onValue, set, onDisconnect, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = { databaseURL: "https://neh-7ee59-default-rtdb.firebaseio.com/" };
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const rooms = {
+  general:{name:'General',emoji:'🌐'},
+  gaming:{name:'Gaming',emoji:'🎮'},
+  music:{name:'Music',emoji:'🎵'},
+  fun:{name:'Fun',emoji:'😂'},
+};
+const colors = ['#185FA5','#D85A30','#639922','#7F77DD','#BA7517','#0F6E56','#993556'];
+
+let myName='',myRoom='general',myColor='',myId='';
+let presenceRef=null,typingRef=null,typingTimer=null;
+
+function getTime(){const d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');}
+function initials(n){return n.substring(0,2).toUpperCase();}
+function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+document.querySelectorAll('.room-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.room-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    myRoom=btn.dataset.room;
+  };
+});
+
+document.getElementById('loginBtn').onclick=login;
+document.getElementById('nameInput').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+
+function login(){
+  const name=document.getElementById('nameInput').value.trim();
+  if(!name){alert('Naam likho pehle!');return;}
+  myName=name;
+  myId=Date.now()+'_'+Math.random().toString(36).substr(2,5);
+  myColor=colors[Math.floor(Math.random()*colors.length)];
+  document.getElementById('loginScreen').style.display='none';
+  const cs=document.getElementById('chatScreen');
+  cs.style.display='flex';
+  document.getElementById('roomEmoji').textContent=rooms[myRoom].emoji;
+  document.getElementById('roomName').textContent=rooms[myRoom].name;
+  setupPresence();
+  loadMessages();
+  watchOnline();
+  watchTyping();
+  push(ref(db,`rooms/${myRoom}/messages`),{type:'system',text:`${myName} chat mein aa gaya! 👋`,time:getTime(),ts:serverTimestamp()});
+}
+
+function setupPresence(){
+  presenceRef=ref(db,`rooms/${myRoom}/online/${myId}`);
+  set(presenceRef,{name:myName,color:myColor});
+  onDisconnect(presenceRef).remove();
+}
+
+function loadMessages(){
+  const el=document.getElementById('messages');
+  el.innerHTML='';
+  onValue(ref(db,`rooms/${myRoom}/messages`),snap=>{
+    el.innerHTML='';
+    if(!snap.exists())return;
+    snap.forEach(child=>renderMsg(child.val()));
+    el.scrollTop=el.scrollHeight;
+  });
+}
+
+function renderMsg(m){
+  const el=document.getElementById('messages');
+  if(m.type==='system'){
+    const d=document.createElement('div');
+    d.className='system-msg';d.textContent=m.text;el.appendChild(d);return;
+  }
+  const isMe=m.senderId===myId;
+  const row=document.createElement('div');
+  row.className='msg-row'+(isMe?' me':'');
+  const av=document.createElement('div');
+  av.className='av';av.style.background=m.color||'#185FA5';av.textContent=initials(m.sender);
+  const bubble=document.createElement('div');
+  bubble.className='bubble';
+  bubble.innerHTML=`<div class="sender-name">${esc(m.sender)}</div><div class="msg-text">${esc(m.text)}</div><div class="msg-time">${m.time}</div>`;
+  row.appendChild(av);row.appendChild(bubble);el.appendChild(row);
+}
+
+function watchOnline(){
+  onValue(ref(db,`rooms/${myRoom}/online`),snap=>{
+    const count=snap.exists()?Object.keys(snap.val()).length:0;
+    document.getElementById('onlineCount').textContent=count+' online';
+  });
+}
+
+function watchTyping(){
+  onValue(ref(db,`rooms/${myRoom}/typing`),snap=>{
+    if(!snap.exists()){document.getElementById('typingBar').textContent='';return;}
+    const typers=Object.values(snap.val()).filter(t=>t.id!==myId).map(t=>t.name);
+    if(typers.length===0)document.getElementById('typingBar').textContent='';
+    else if(typers.length===1)document.getElementById('typingBar').textContent=typers[0]+' likh raha hai...';
+    else document.getElementById('typingBar').textContent=typers.join(', ')+' likh rahe hain...';
+  });
+}
+
+function sendMessage(){
+  const inp=document.getElementById('msgInput');
+  const text=inp.value.trim();
+  if(!text)return;
+  inp.value='';clearTyping();
+  push(ref(db,`rooms/${myRoom}/messages`),{type:'msg',sender:myName,senderId:myId,color:myColor,text:text,time:getTime(),ts:serverTimestamp()});
+}
+
+function setTyping(){
+  typingRef=ref(db,`rooms/${myRoom}/typing/${myId}`);
+  set(typingRef,{name:myName,id:myId});
+  clearTimeout(typingTimer);
+  typingTimer=setTimeout(clearTyping,3000);
+}
+
+function clearTyping(){
+  clearTimeout(typingTimer);
+  if(typingRef)remove(typingRef);
+}
+
+document.getElementById('sendBtn').onclick=sendMessage;
+document.getElementById('msgInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter')sendMessage();else setTyping();
+});
+
+document.getElementById('leaveBtn').onclick=()=>{
+  if(presenceRef)remove(presenceRef);
+  clearTyping();
+  push(ref(db,`rooms/${myRoom}/messages`),{type:'system',text:`${myName} chala gaya 👋`,time:getTime(),ts:serverTimestamp()});
+  document.getElementById('chatScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='block';
+  document.getElementById('messages').innerHTML='';
+};
+</script>
+</body>
+</html>
